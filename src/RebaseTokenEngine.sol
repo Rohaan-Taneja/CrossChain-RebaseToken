@@ -78,7 +78,8 @@ contract RebaseTokenEngine {
          */
 
         // calculating the interest gained on current principle amount + before updating amount and time
-        rebaseToken.InterestGained_beforeUpdatingTokenBalance(msg.sender);
+        // this is being called in the mint function 
+        // rebaseToken.InterestGained_beforeUpdatingTokenBalance(msg.sender);
         userDeposited_ETH_Balance[msg.sender] += msg.value;
         // minting equivalent amount of new rebase token to user
         (bool success ) = rebaseToken.mint(msg.sender , msg.value);
