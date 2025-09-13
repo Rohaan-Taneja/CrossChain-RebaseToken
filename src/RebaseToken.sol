@@ -27,6 +27,8 @@ pragma solidity ^0.8.0;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+import {console} from "lib/forge-std/src/console.sol";
+
 contract RebaseToken is ERC20, Ownable {
     //errors
 
@@ -65,7 +67,10 @@ contract RebaseToken is ERC20, Ownable {
         _;
     }
 
-    constructor(string memory _tokenName, string memory _symbol) ERC20(_tokenName, _symbol) Ownable(address(msg.sender)) {}
+    constructor(string memory _tokenName, string memory _symbol)
+        ERC20(_tokenName, _symbol)
+        Ownable(address(msg.sender))
+    {}
 
     // external
 
@@ -73,16 +78,15 @@ contract RebaseToken is ERC20, Ownable {
      * @notice => this will mint new rebase tokens and then update user last updated time to current
      */
     function mint(address _user, uint256 amount) external onlyOwner returns (bool) {
-        InterestGained_beforeUpdatingTokenBalance(msg.sender);
-        _mint(_user, amount);
-        userToken[_user] += amount;
-        userToken_LastUpdatedTime[_user] = block.timestamp;
+        _update(address(0), _user, amount);
 
         return true;
     }
 
-    function burn(uint256 amount, address user) external onlyOwner {
-        _burn(user, amount);
+    function burn(uint256 amount, address user) external onlyOwner returns (bool) {
+        _update(user, address(0), amount);
+
+        return true;
     }
 
     /**
@@ -166,18 +170,30 @@ contract RebaseToken is ERC20, Ownable {
             InterestGained_beforeUpdatingTokenBalance(from);
 
             userToken[from] = userToken[from] - value;
+            userToken_LastUpdatedTime[from] = block.timestamp;
         }
-        //  this case where value < (user principle tokens + interest tokens gained)
-        else if (value <= fromBalance) {
+        // this case where value == principle or  value < (user principle tokens + interest tokens gained)
+        // we will mint interest gained in both these cases
+        // value == userToken[from] , in this cases also we will mint ,else the userToken[this.user] = 0 and will create further issue later
+        else if (value == userToken[from] || value <= fromBalance) {
             InterestGained_beforeUpdatingTokenBalance(from);
             uint256 userInterestAmount = balanceOf(from) - userToken[from];
-            _mint(from, userInterestAmount);
 
+            console.log(
+                "user interest gained and user balance before minting", userInterestAmount, get_UserTokenBalance(address(from))
+            );
+
+            // nw tokens minted => added new tokens to total supply and same to the user balance
+            totalRebaseTokens += userInterestAmount;
+
+            console.log("this is the value transfer" , value);
             // new tokens minted , so increasing the user balance and user is transfering , so decreasing value amount of tokend from user balance
             userToken[from] = userToken[from] + userInterestAmount - value;
             totalRebaseTokens += userInterestAmount;
 
-            // minted new interest gained tokens , so total interest gained net is set to zero
+            console.log("user token balance after" , get_UserTokenBalance(address(from)));
+
+            // new nterest gained tokens are minted , so total interest gained net is set to zero
             InterestGained_beforeUpdatingBalance[from] = 0;
 
             userToken_LastUpdatedTime[from] = block.timestamp;
@@ -210,5 +226,9 @@ contract RebaseToken is ERC20, Ownable {
 
     function get_userTokenLastUpdateTime(address _user) public view returns (uint256) {
         return userToken_LastUpdatedTime[_user];
+    }
+
+    function get_UserTokenBalance(address _user) public view returns (uint256) {
+        return userToken[_user];
     }
 }
